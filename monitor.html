@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Monitor Bus Trans Padang</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: #f8f9fa;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+            gap: 20px;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+
+        .sidebar {
+            width: 380px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .card {
+            background: white;
+            border-radius: 15px;
+            padding: 20px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+        }
+
+        .card h2 {
+            color: #2c3e50;
+            font-size: 1.2rem;
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .corridor-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 45vh;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .corridor-item {
+            background: #f8f9fa;
+            border-radius: 12px;
+            padding: 15px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            border: 1px solid #e9ecef;
+        }
+
+        .corridor-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .corridor-item.active {
+            background: #007bff;
+            color: white;
+            border-color: #0056b3;
+        }
+
+        .corridor-info strong {
+            font-size: 1.1rem;
+            display: block;
+            margin-bottom: 5px;
+        }
+
+        .corridor-info .description {
+            font-size: 0.9rem;
+            opacity: 0.8;
+            margin-bottom: 8px;
+        }
+
+        .bus-count {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .active .bus-count {
+            color: #fff;
+        }
+
+        .bus-list {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            max-height: 35vh;
+            overflow-y: auto;
+            padding-right: 5px;
+        }
+
+        .bus-item {
+            background: white;
+            border-radius: 12px;
+            padding: 15px;
+            border: 1px solid #e9ecef;
+            transition: all 0.3s ease;
+        }
+
+        .bus-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+        }
+
+        .bus-info {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 10px;
+        }
+
+        .bus-status {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.8rem;
+            font-weight: 500;
+        }
+
+        .status-active {
+            background: #28a745;
+            color: white;
+        }
+
+        .status-inactive {
+            background: #dc3545;
+            color: white;
+        }
+
+        .bus-details {
+            font-size: 0.9rem;
+            color: #6c757d;
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .main-content {
+            flex: 1;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .legend {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: white;
+            padding: 15px;
+            border-radius: 12px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+            z-index: 1000;
+            max-width: 300px;
+        }
+
+        .legend h3 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 1rem;
+        }
+
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 8px 0;
+        }
+
+        .legend-color {
+            width: 20px;
+            height: 20px;
+            border-radius: 4px;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px 30px;
+            border-radius: 12px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            display: none;
+            font-weight: 500;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: #f1f1f1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #c1c1c1;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #a8a8a8;
+        }
+
+        /* Leaflet Custom Styles */
+        .leaflet-popup-content-wrapper {
+            border-radius: 12px;
+            padding: 5px;
+        }
+
+        .leaflet-popup-content {
+            margin: 10px 15px;
+            line-height: 1.5;
+        }
+
+        .halte-marker i {
+            font-size: 24px;
+            filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2));
+        }
+
+        .bus-marker i {
+            font-size: 20px;
+            color: #2c3e50;
+            filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.2));
+        }
+
+        /* Responsive Design */
+        @media (max-width: 1024px) {
+            .container {
+                flex-direction: column;
+                padding: 10px;
+                gap: 10px;
+            }
+
+            .sidebar {
+                width: 100%;
+            }
+
+            .main-content {
+                height: 60vh;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="card">
+                <h2>
+                    <i class="fas fa-route"></i>
+                    Koridor Bus Trans Padang
+                </h2>
+                <div class="corridor-list" id="corridorList">
+                    <!-- Koridor akan ditambahkan di sini -->
+                </div>
+            </div>
+            
+            <div class="card">
+                <h2>
+                    <i class="fas fa-bus"></i>
+                    Bus Aktif
+                </h2>
+                <div class="bus-list" id="busList">
+                    <!-- Bus aktif akan ditambahkan di sini -->
+                </div>
+            </div>
+        </div>
+        
+        <div class="main-content">
+            <div id="map"></div>
+            <div class="legend">
+                <h3>Koridor</h3>
+                <div id="legendContent">
+                    <!-- Legend akan ditambahkan di sini -->
+                </div>
+            </div>
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i> Loading...
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        class BusMonitor {
+            constructor() {
+                this.serverUrl = ' https://c10d-2001-448a-1103-1dc6-44e6-be6e-1d2e-92f7.ngrok-free.app';
+                this.map = null;
+                this.corridors = [];
+                this.busMarkers = {};
+                this.corridorPolylines = {};
+                this.halteMarkers = {};
+                this.selectedCorridor = null;
+                
+                this.initialize();
+            }
+
+            async initialize() {
+                this.initializeMap();
+                await this.loadCorridors();
+                this.startBusUpdates();
+            }
+
+            initializeMap() {
+                // Centered at Padang
+                this.map = L.map('map').setView([-0.9478, 100.3572], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+            }
+
+            async loadCorridors() {
+                try {
+                    const response = await fetch(`${this.serverUrl}/corridors`);
+                    if (!response.ok) throw new Error('Failed to load corridors');
+                    
+                    this.corridors = await response.json();
+                    this.updateCorridorList();
+                    this.updateLegend();
+                    this.showAllCorridors();
+                } catch (error) {
+                    console.error('Error loading corridors:', error);
+                    this.showError('Gagal memuat data koridor');
+                }
+            }
+
+            showAllCorridors() {
+                this.corridors.forEach(corridor => {
+                    this.showCorridorRoute(corridor.id, false);
+                });
+                // Fit bounds to show all routes
+                const bounds = [];
+                Object.values(this.corridorPolylines).forEach(polyline => {
+                    bounds.push(...polyline.getLatLngs());
+                });
+                if (bounds.length > 0) {
+                    this.map.fitBounds(bounds);
+                }
+            }
+
+            updateCorridorList() {
+                const container = document.getElementById('corridorList');
+                container.innerHTML = this.corridors.map(corridor => `
+                    <div class="corridor-item" onclick="busMonitor.selectCorridor('${corridor.id}')">
+                        <div class="corridor-info">
+                            <strong>${corridor.name}</strong>
+                            <div style="color: ${corridor.color}">
+                                <i class="fas fa-route"></i> ${corridor.description}
+                            </div>
+                            <div class="bus-count">
+                                <i class="fas fa-bus"></i> ${corridor.buses.length} Bus
+                            </div>
+                        </div>
+                    </div>
+                `).join('');
+            }
+
+            showCorridorRoute(corridorId, fitBounds = true) {
+                const corridor = this.corridors.find(c => c.id === corridorId);
+                if (!corridor || !corridor.route) return;
+
+                // Remove existing route if any
+                if (this.corridorPolylines[corridorId]) {
+                    this.map.removeLayer(this.corridorPolylines[corridorId]);
+                    corridor.route.forEach(point => {
+                        if (this.halteMarkers[point.name]) {
+                            this.map.removeLayer(this.halteMarkers[point.name]);
+                        }
+                    });
+                }
+
+                // Add route polyline
+                const routeCoordinates = corridor.route.map(point => [point.lat, point.lng]);
+                const polyline = L.polyline(routeCoordinates, {
+                    color: corridor.color,
+                    weight: 5,
+                    opacity: 0.7
+                }).addTo(this.map);
+
+                // Add halte markers
+                corridor.route.forEach(point => {
+                    const halteIcon = L.divIcon({
+                        className: 'halte-marker',
+                        html: `<i class="fas fa-map-marker-alt" style="color: ${corridor.color}"></i>`,
+                        iconSize: [25, 25]
+                    });
+
+                    const marker = L.marker([point.lat, point.lng], { icon: halteIcon })
+                        .bindPopup(`
+                            <strong>${point.name}</strong><br>
+                            ${corridor.name}<br>
+                            ${corridor.description}
+                        `)
+                        .addTo(this.map);
+
+                    this.halteMarkers[point.name] = marker;
+                });
+
+                this.corridorPolylines[corridorId] = polyline;
+
+                if (fitBounds) {
+                    this.map.fitBounds(polyline.getBounds());
+                }
+            }
+
+            selectCorridor(corridorId) {
+                this.selectedCorridor = corridorId;
+                
+                // Update UI
+                document.querySelectorAll('.corridor-item').forEach(item => {
+                    item.classList.remove('active');
+                });
+                document.querySelector(`[onclick="busMonitor.selectCorridor('${corridorId}')"]`)
+                    .classList.add('active');
+
+                // Clear map and show selected corridor
+                Object.values(this.corridorPolylines).forEach(polyline => {
+                    this.map.removeLayer(polyline);
+                });
+                Object.values(this.halteMarkers).forEach(marker => {
+                    this.map.removeLayer(marker);
+                });
+
+                this.showCorridorRoute(corridorId);
+            }
+
+            updateLegend() {
+                const container = document.getElementById('legendContent');
+                container.innerHTML = this.corridors.map(corridor => `
+                    <div class="legend-item">
+                        <div class="legend-color" style="background: ${corridor.color}"></div>
+                        <div>${corridor.name} - ${corridor.description}</div>
+                    </div>
+                `).join('');
+            }
+
+            startBusUpdates() {
+                setInterval(async () => {
+                    try {
+                        const response = await fetch(`${this.serverUrl}/active-buses`);
+                        const buses = await response.json();
+                        this.updateBuses(buses);
+                    } catch (error) {
+                        console.error('Error updating buses:', error);
+                    }
+                }, 5000);
+            }
+
+            updateBuses(buses) {
+                // Update bus list
+                const container = document.getElementById('busList');
+                container.innerHTML = buses.map(bus => `
+                    <div class="bus-item">
+                        <div class="bus-info">
+                            <strong>${bus.busId}</strong>
+                            <span class="bus-status status-active">Active</span>
+                        </div>
+                        <div class="bus-details">
+                            Last Update: ${new Date(bus.lastUpdate).toLocaleTimeString()}
+                            <br>
+                            Speed: ${((bus.speed || 0) * 3.6).toFixed(1)} km/h
+                        </div>
+                    </div>
+                `).join('');
+
+                // Update markers
+                buses.forEach(bus => {
+                    let marker = this.busMarkers[bus.busId];
+                    
+                    if (!marker) {
+                        marker = L.marker([bus.latitude, bus.longitude], {
+                            icon: L.divIcon({
+                                className: 'bus-marker',
+                                html: '<i class="fas fa-bus"></i>',
+                                iconSize: [30, 30]
+                            })
+                        }).addTo(this.map);
+                        
+                        this.busMarkers[bus.busId] = marker;
+                    } else {
+                        marker.setLatLng([bus.latitude, bus.longitude]);
+                    }
+
+                    marker.bindPopup(`
+                        <strong>${bus.busId}</strong><br>
+                        Speed: ${((bus.speed || 0) * 3.6).toFixed(1)} km/h<br>
+                        Last Update: ${new Date(bus.lastUpdate).toLocaleTimeString()}
+                    `);
+                });
+
+                // Remove inactive buses
+                Object.keys(this.busMarkers).forEach(busId => {
+                    if (!buses.find(b => b.busId === busId)) {
+                        this.map.removeLayer(this.busMarkers[busId]);
+                        delete this.busMarkers[busId];
+                    }
+                });
+            }
+
+            showError(message) {
+                const loading = document.getElementById('loading');
+                loading.innerHTML = `<i class="fas fa-exclamation-circle"></i> ${message}`;
+                loading.style.display = 'block';
+                setTimeout(() => {
+                    loading.style.display = 'none';
+                }, 3000);
+            }
+        }
+
+        // Initialize when page loads
+        let busMonitor;
+        document.addEventListener('DOMContentLoaded', () => {
+            busMonitor = new BusMonitor();
+        });
+    </script>
+</body>
+</html> 

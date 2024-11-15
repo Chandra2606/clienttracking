@@ -1,0 +1,302 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Bus Tracking - Trans Padang</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.1/css/all.min.css">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            display: flex;
+            height: 100vh;
+        }
+
+        .sidebar {
+            width: 300px;
+            background: white;
+            padding: 20px;
+            box-shadow: 2px 0 5px rgba(0,0,0,0.1);
+            overflow-y: auto;
+        }
+
+        .main-content {
+            flex: 1;
+            position: relative;
+        }
+
+        #map {
+            width: 100%;
+            height: 100%;
+        }
+
+        .status-card {
+            background: white;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+
+        .status-item {
+            display: flex;
+            align-items: center;
+            margin: 10px 0;
+            padding: 8px;
+            border-bottom: 1px solid #eee;
+        }
+
+        .status-item i {
+            width: 24px;
+            margin-right: 10px;
+            color: #666;
+        }
+
+        .status-label {
+            font-weight: bold;
+            color: #333;
+            margin-right: 8px;
+        }
+
+        .status-value {
+            color: #666;
+        }
+
+        .connected {
+            color: #28a745;
+        }
+
+        .disconnected {
+            color: #dc3545;
+        }
+
+        #logoutBtn {
+            width: 100%;
+            padding: 10px;
+            background: #dc3545;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+
+        #logoutBtn:hover {
+            background: #c82333;
+        }
+
+        .loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(255,255,255,0.9);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="sidebar">
+            <div class="status-card">
+                <h2><i class="fas fa-bus"></i> Bus Status</h2>
+                <div class="status-item">
+                    <i class="fas fa-id-card"></i>
+                    <span class="status-label">Bus ID:</span>
+                    <span id="busId" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <i class="fas fa-mobile-alt"></i>
+                    <span class="status-label">Device ID:</span>
+                    <span id="deviceId" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <i class="fas fa-signal"></i>
+                    <span class="status-label">Status:</span>
+                    <span id="connectionStatus" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <i class="fas fa-clock"></i>
+                    <span class="status-label">Last Update:</span>
+                    <span id="lastUpdate" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <i class="fas fa-location-dot"></i>
+                    <span class="status-label">Location:</span>
+                    <span id="location" class="status-value">-</span>
+                </div>
+                <div class="status-item">
+                    <i class="fas fa-tachometer-alt"></i>
+                    <span class="status-label">Speed:</span>
+                    <span id="speed" class="status-value">-</span>
+                </div>
+            </div>
+            <button id="logoutBtn" onclick="logout()">
+                <i class="fas fa-sign-out-alt"></i> Logout
+            </button>
+        </div>
+        <div class="main-content">
+            <div id="map"></div>
+            <div class="loading" id="loading">
+                <i class="fas fa-spinner fa-spin"></i> Loading...
+            </div>
+        </div>
+    </div>
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        class BusTracker {
+            constructor() {
+                this.serverUrl = ' https://c10d-2001-448a-1103-1dc6-44e6-be6e-1d2e-92f7.ngrok-free.app';
+                this.busId = localStorage.getItem('registeredBusId');
+                this.deviceId = localStorage.getItem('deviceId');
+                this.map = null;
+                this.marker = null;
+                this.updateInterval = null;
+
+                if (!this.checkRegistration()) {
+                    return;
+                }
+
+                this.initializeMap();
+                this.initializeTracking();
+            }
+
+            checkRegistration() {
+                if (!this.busId || !this.deviceId) {
+                    window.location.replace('./register.html');
+                    return false;
+                }
+                return true;
+            }
+
+            initializeMap() {
+                // Centered at Padang City
+                this.map = L.map('map').setView([-0.9471, 100.4172], 13);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '© OpenStreetMap contributors'
+                }).addTo(this.map);
+            }
+
+            initializeTracking() {
+                this.updateInfo();
+                this.startLocationUpdates();
+            }
+
+            updateInfo() {
+                document.getElementById('busId').textContent = this.busId;
+                document.getElementById('deviceId').textContent = this.deviceId;
+            }
+
+            startLocationUpdates() {
+                if (!navigator.geolocation) {
+                    this.showError('Geolocation tidak didukung');
+                    return;
+                }
+
+                this.updateInterval = setInterval(() => {
+                    navigator.geolocation.getCurrentPosition(
+                        position => this.updateLocation(position),
+                        error => this.handleLocationError(error),
+                        {
+                            enableHighAccuracy: true,
+                            timeout: 10000,
+                            maximumAge: 0
+                        }
+                    );
+                }, 5000);
+            }
+
+            async updateLocation(position) {
+                try {
+                    const { latitude, longitude, speed } = position.coords;
+                    
+                    // Update map
+                    if (!this.marker) {
+                        this.marker = L.marker([latitude, longitude]).addTo(this.map);
+                    } else {
+                        this.marker.setLatLng([latitude, longitude]);
+                    }
+                    this.map.setView([latitude, longitude]);
+
+                    // Update server
+                    const response = await fetch(`${this.serverUrl}/update-location`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({
+                            busId: this.busId,
+                            deviceId: this.deviceId,
+                            latitude,
+                            longitude,
+                            speed: speed || 0
+                        })
+                    });
+
+                    if (!response.ok) throw new Error('Network response was not ok');
+                    
+                    const result = await response.json();
+                    if (result.success) {
+                        this.updateConnectionStatus(true);
+                        this.updateLastUpdate();
+                        this.updateLocationInfo(latitude, longitude, speed);
+                    } else {
+                        throw new Error(result.error);
+                    }
+
+                } catch (error) {
+                    console.error('Error:', error);
+                    this.updateConnectionStatus(false);
+                }
+            }
+
+            updateLocationInfo(latitude, longitude, speed) {
+                document.getElementById('location').textContent = 
+                    `${latitude.toFixed(6)}, ${longitude.toFixed(6)}`;
+                document.getElementById('speed').textContent = 
+                    `${((speed || 0) * 3.6).toFixed(1)} km/h`;
+            }
+
+            updateConnectionStatus(connected) {
+                const status = document.getElementById('connectionStatus');
+                status.textContent = connected ? 'Connected' : 'Disconnected';
+                status.className = `status-value ${connected ? 'connected' : 'disconnected'}`;
+            }
+
+            updateLastUpdate() {
+                document.getElementById('lastUpdate').textContent = 
+                    new Date().toLocaleTimeString();
+            }
+
+            handleLocationError(error) {
+                console.error('Location error:', error);
+                this.updateConnectionStatus(false);
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('registeredBusId');
+            localStorage.removeItem('deviceId');
+            window.location.replace('./register.html');
+        }
+
+        // Initialize when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            window.tracker = new BusTracker();
+        });
+    </script>
+</body>
+</html>
